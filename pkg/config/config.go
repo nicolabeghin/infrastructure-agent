@@ -2112,7 +2112,7 @@ func urlEnvironmentPrefix(staging bool) string {
 
 func urlRegionPrefix(licenseKey string) string {
 	if license.IsRegionEU(licenseKey) {
-		return "eu."
+		return "eu01."
 	}
 
 	return ""

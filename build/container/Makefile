@@ -25,7 +25,7 @@ ifeq ($(AGENT_ARCH), arm)
 endif
 
 ifeq ($(AGENT_ARCH), arm64)
-	AGENT_ARCH := $(AGENT_ARCH)_v8.0
+	AGENT_ARCH := $(AGENT_ARCH)
 endif
 
 ifeq ($(AGENT_ARCH), amd64)
@@ -134,9 +134,9 @@ base/get-integrations : embed-integrations
 .PHONY : base/get-infra-agent
 base/get-infra-agent : workspace
 base/get-infra-agent:
-	@(cp $(AGENT_BUILD_TARGET_DIR)/$(GOOS)-ctl-$(DOCKER_ARCH)_$(GOOS)_$(AGENT_ARCH)/* $(PROJECT_WORKSPACE)/)
-	@(cp $(AGENT_BUILD_TARGET_DIR)/$(GOOS)-service-$(DOCKER_ARCH)_$(GOOS)_$(AGENT_ARCH)/* $(PROJECT_WORKSPACE)/)
-	@(cp $(AGENT_BUILD_TARGET_DIR)/$(GOOS)-agent-$(DOCKER_ARCH)_$(GOOS)_$(AGENT_ARCH)/* $(PROJECT_WORKSPACE)/)
+	@(cp $(AGENT_BUILD_TARGET_DIR)/$(GOOS)-$(AGENT_BIN)-ctl_$(GOOS)_$(AGENT_ARCH)/* $(PROJECT_WORKSPACE)/)
+	@(cp $(AGENT_BUILD_TARGET_DIR)/$(GOOS)-$(AGENT_BIN)-service_$(GOOS)_$(AGENT_ARCH)/* $(PROJECT_WORKSPACE)/)
+	@(cp $(AGENT_BUILD_TARGET_DIR)/$(GOOS)-$(AGENT_BIN)_$(GOOS)_$(AGENT_ARCH)/* $(PROJECT_WORKSPACE)/)
 
 .PHONY : build/base
 build/base : workspace/assets

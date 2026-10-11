@@ -10,12 +10,18 @@ on:
         required: true
         type: string
       severity:
-        required: true
+        required: false
         type: string
+        default: 'CRITICAL,HIGH'
       FIPS:
         required: false
         type: boolean
         default: false
+
+
+permissions:
+  contents: read
+  security-events: write
 
 env:
   FIPS: ${{ inputs.FIPS == true && '-fips' || '' }}
@@ -27,7 +33,7 @@ jobs:
     if: ${{ ! github.event.schedule }} # Table output
     steps:
       - name: newrelic/infrastructure
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: "docker.io/newrelic/infrastructure${{ env.FIPS }}:${{ inputs.tag }}"
           format: 'table'
@@ -40,7 +46,7 @@ jobs:
           TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
 
       - name: newrelic/k8s-events-forwarder
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: "docker.io/newrelic/k8s-events-forwarder${{ env.FIPS }}:${{ inputs.tag }}"
           format: 'table'
@@ -53,7 +59,7 @@ jobs:
           TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
 
       - name: newrelic/nri-forwarder
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: "docker.io/newrelic/nri-forwarder${{ env.FIPS }}:${{ inputs.tag }}"
           format: 'table'
@@ -74,7 +80,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Sarif newrelic/infrastructure
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: "docker.io/newrelic/infrastructure${{ env.FIPS }}:${{ inputs.tag }}"
           format: 'sarif'
@@ -93,15 +99,10 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
-      - name: Send notification to Slack Workflow
+      - name: Send Slack notification
         if: ${{ failure() }}
-        id: slack
-        uses: slackapi/slack-github-action@v1.22.0
+        uses: archive/github-actions-slack@master
         with:
-          # This data can be any valid JSON from a previous step in the GitHub Action
-          payload: |
-            {
-              "text": ":rotating_light: Hi CAOS (@hero), critical or high vulnerabilities found, see: https://github.com/newrelic/infrastructure-agent/security/code-scanning?query=is%3Aopen+branch%3Amaster+tool%3ATrivy :rotating_light:"
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook }}
+          slack-bot-user-oauth-access-token: ${{ secrets.COREINT_SLACK_TOKEN }}
+          slack-channel: ${{ secrets.COREINT_SLACK_CHANNEL }}
+          slack-text: ":rotating_light: Hi CAOS (@hero), critical or high vulnerabilities found, see: https://github.com/newrelic/infrastructure-agent/security/code-scanning?query=is%3Aopen+branch%3Amaster+tool%3ATrivy :rotating_light:"

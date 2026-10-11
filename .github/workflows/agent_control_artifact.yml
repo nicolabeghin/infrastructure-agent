@@ -1,0 +1,547 @@
+name: Agent Control Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to process (e.g., 1.72.1)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Skip the OCI publish step and upload dist/ as a downloadable GH Actions artifact instead'
+        required: false
+        type: boolean
+        default: false
+  release:
+    types: [released]
+
+
+permissions:
+  contents: read
+
+jobs:
+  repackage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Validate release tag and extract version
+        id: validate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+            echo "Triggered by release event: ${TAG}"
+          else
+            TAG="${{ inputs.tag }}"
+            echo "Triggered by manual dispatch: ${TAG}"
+          fi
+
+          echo "Validating release tag: ${TAG}"
+          echo "gh release view \"${TAG}\" --repo newrelic/infrastructure-agent"
+
+          # Check if release exists
+          if ! gh release view "${TAG}" --repo newrelic/infrastructure-agent >/dev/null 2>&1; then
+            echo "::error::Release tag '${TAG}' not found"
+            exit 1
+          fi
+
+          # Extract version (remove 'v' prefix if present, remove any suffix after '-')
+          VERSION="${TAG#v}"
+          VERSION="${VERSION%%-*}"
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "✓ Release validated: ${TAG} (version: ${VERSION})"
+
+      - name: Create workspace directories
+        run: |
+          set -euo pipefail
+
+          DIRS=(
+            downloads
+            extracted/windows
+            extracted/linux/amd64/tarball
+            extracted/linux/amd64/deb
+            extracted/linux/arm64/tarball
+            extracted/linux/arm64/deb
+            modified
+            dist/windows
+            dist/linux-amd64
+            dist/linux-arm64
+          )
+
+          mkdir -p "${DIRS[@]}"
+
+          for dir in "${DIRS[@]}"; do
+            if [ ! -d "${dir}" ]; then
+              echo "::error::Failed to create directory: ${dir}"
+              exit 1
+            fi
+          done
+
+          echo "✓ Workspace directories created"
+
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          echo "Installing extraction tools..."
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq msitools unzip >/dev/null 2>&1
+
+          # Verify installations
+          which msiextract unzip tar ar
+          echo "✓ All extraction tools installed"
+
+
+      - name: Download Windows MSI artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.validate.outputs.version }}
+          TAG: ${{ steps.validate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd downloads
+          echo "Downloading Windows MSI artifacts..."
+
+          PATTERN="newrelic-infra-amd64.${VERSION}.msi"
+          echo "  Downloading: ${PATTERN}*"
+          gh release download "${TAG}" \
+            --repo newrelic/infrastructure-agent \
+            --pattern "${PATTERN}*" \
+            --skip-existing || echo "::warning::Failed to download ${PATTERN}"
+
+          find .
+
+          if [ -z "$(find . -maxdepth 1 -type f)" ]; then
+            echo "::error::No MSI files were downloaded"
+            exit 1
+          fi
+          echo "✓ MSI download complete"
+
+      - name: Download Linux artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.validate.outputs.version }}
+          TAG: ${{ steps.validate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd downloads
+          echo "Downloading Linux artifacts..."
+
+          # Download amd64 and arm64 artifacts
+          for ARCH in amd64 arm64; do
+            echo "Downloading ${ARCH} artifacts..."
+
+            TARBALL_PATTERN="newrelic-infra_linux_${VERSION}_${ARCH}.tar.gz"
+            echo "  Downloading: ${TARBALL_PATTERN}*"
+            gh release download "${TAG}" \
+              --repo newrelic/infrastructure-agent \
+              --pattern "${TARBALL_PATTERN}*" \
+              --skip-existing || echo "::warning::Failed to download ${TARBALL_PATTERN}"
+
+            DEB_PATTERN="newrelic-infra_systemd_${VERSION}_${ARCH}.deb"
+            echo "  Downloading: ${DEB_PATTERN}*"
+            gh release download "${TAG}" \
+              --repo newrelic/infrastructure-agent \
+              --pattern "${DEB_PATTERN}*" \
+              --skip-existing || echo "::warning::Failed to download ${DEB_PATTERN}"
+          done
+
+          # Verify we got the expected files
+          for ARCH in amd64 arm64; do
+            TARBALL="newrelic-infra_linux_${VERSION}_${ARCH}.tar.gz"
+            DEB="newrelic-infra_systemd_${VERSION}_${ARCH}.deb"
+
+            if [ ! -f "${TARBALL}" ]; then
+              echo "::error::Missing tarball: ${TARBALL}"
+              exit 1
+            fi
+
+            if [ ! -f "${DEB}" ]; then
+              echo "::error::Missing deb: ${DEB}"
+              exit 1
+            fi
+          done
+
+          echo "✓ Linux download complete"
+
+      - name: Validate checksums
+        env:
+          VERSION: ${{ steps.validate.outputs.version }}
+        run: |
+          cd downloads
+          echo "Validating checksums..."
+
+          MSI_FILE="newrelic-infra-amd64.${VERSION}.msi"
+          SUM_FILE="${MSI_FILE}.sum"
+
+          if [ ! -f "${SUM_FILE}" ]; then
+            echo "::error::Checksum file not found: ${SUM_FILE}"
+            exit 1
+          fi
+
+          if [ ! -f "${MSI_FILE}" ]; then
+            echo "::error::MSI file not found: ${MSI_FILE}"
+            exit 1
+          fi
+
+          # Validate checksum (format: <hash> <filename>)
+          if sha256sum -c "${SUM_FILE}"; then
+            echo "✓ Checksum validation passed for ${MSI_FILE}"
+          else
+            echo "::error::Checksum validation failed for ${MSI_FILE}"
+            exit 1
+          fi
+
+
+      - name: Validate Linux checksums
+        env:
+          VERSION: ${{ steps.validate.outputs.version }}
+        run: |
+          cd downloads
+          echo "Validating Linux checksums..."
+
+          for ARCH in amd64 arm64; do
+            echo "Validating ${ARCH} checksums..."
+
+            TARBALL="newrelic-infra_linux_${VERSION}_${ARCH}.tar.gz"
+            TARBALL_SUM="${TARBALL}.sum"
+
+            if [ ! -f "${TARBALL_SUM}" ]; then
+              echo "::error::Checksum file not found: ${TARBALL_SUM}"
+              exit 1
+            fi
+
+            if sha256sum -c "${TARBALL_SUM}"; then
+              echo "  ✓ Checksum validation passed for ${TARBALL}"
+            else
+              echo "::error::Checksum validation failed for ${TARBALL}"
+              exit 1
+            fi
+
+            DEB="newrelic-infra_systemd_${VERSION}_${ARCH}.deb"
+            DEB_SUM="${DEB}.sum"
+
+            if [ ! -f "${DEB_SUM}" ]; then
+              echo "::error::Checksum file not found: ${DEB_SUM}"
+              exit 1
+            fi
+
+            if sha256sum -c "${DEB_SUM}"; then
+              echo "  ✓ Checksum validation passed for ${DEB}"
+            else
+              echo "::error::Checksum validation failed for ${DEB}"
+              exit 1
+            fi
+          done
+
+          echo "✓ All Linux checksums validated"
+
+      - name: Download and verify nrjmx
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "Downloading nrjmx..."
+
+          NRJMX_VERSION="$(cat build/embed/nrjmx.version)"
+          NRJMX_VERSION_NUM="${NRJMX_VERSION#v}"
+          ASSET="nrjmx_linux_${NRJMX_VERSION_NUM}_noarch.tar.gz"
+
+          echo "  nrjmx version: ${NRJMX_VERSION}"
+          echo "  Downloading: ${ASSET}"
+          gh release download "${NRJMX_VERSION}" \
+            --repo newrelic/nrjmx \
+            --pattern "${ASSET}" \
+            --dir downloads
+
+          echo "Verifying nrjmx checksum against GitHub release digest..."
+          EXPECTED_DIGEST="$(gh api "repos/newrelic/nrjmx/releases/tags/${NRJMX_VERSION}" \
+            --jq ".assets[] | select(.name == \"${ASSET}\") | .digest" | sed 's/^sha256://')"
+
+          if [ -z "${EXPECTED_DIGEST}" ]; then
+            echo "::error::Could not resolve expected digest for ${ASSET}"
+            exit 1
+          fi
+
+          ACTUAL_DIGEST="$(sha256sum "downloads/${ASSET}" | cut -d' ' -f1)"
+
+          if [ "${EXPECTED_DIGEST}" != "${ACTUAL_DIGEST}" ]; then
+            echo "::error::nrjmx digest mismatch: expected ${EXPECTED_DIGEST}, got ${ACTUAL_DIGEST}"
+            exit 1
+          fi
+          echo "✓ nrjmx checksum verified"
+
+          echo "Extracting nrjmx..."
+          mkdir -p extracted/nrjmx
+          tar xzf "downloads/${ASSET}" -C extracted/nrjmx
+
+          if [ ! -f "extracted/nrjmx/usr/lib/nrjmx/nrjmx.jar" ]; then
+            echo "::error::nrjmx.jar not found after extraction"
+            exit 1
+          fi
+          echo "✓ nrjmx.jar extracted"
+
+      - name: Extract MSI artifacts
+        run: |
+          set -euo pipefail
+          cd downloads
+          echo "Extracting MSI artifacts..."
+
+          for MSI in *.msi; do
+            [ -e "${MSI}" ] || continue
+
+            EXTRACT_DIR="../extracted/windows/"
+
+            echo "  Extracting: ${MSI} -> ${EXTRACT_DIR}"
+            mkdir -p "${EXTRACT_DIR}"
+
+            if msiextract --directory "${EXTRACT_DIR}" "${MSI}" 2>/dev/null; then
+              echo "    ✓ Extracted with msiextract"
+            else
+              echo "::warning::Failed to extract ${MSI}"
+              exit 1
+            fi
+
+            # Verify extraction
+            if [ -z "$(ls -A "${EXTRACT_DIR}")" ]; then
+              echo "::warning::Extraction resulted in empty directory: ${EXTRACT_DIR}"
+            fi
+          done
+
+          cd ..
+
+          echo "✓ MSI extraction complete"
+
+      - name: Extract Linux artifacts
+        env:
+          VERSION: ${{ steps.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd downloads
+          echo "Extracting Linux artifacts..."
+
+          ROOT_ABS="$(pwd)"
+
+          for ARCH in amd64 arm64; do
+            echo "Extracting ${ARCH} artifacts..."
+
+            # Extract tarball
+            TARBALL="newrelic-infra_linux_${VERSION}_${ARCH}.tar.gz"
+            TARBALL_DIR="../extracted/linux/${ARCH}/tarball"
+
+            echo "  Extracting tarball: ${TARBALL}"
+            if tar xf "${TARBALL}" -C "${TARBALL_DIR}"; then
+              echo "    ✓ Tarball extracted"
+            else
+              echo "::error::Failed to extract ${TARBALL}"
+              exit 1
+            fi
+
+            # Verify main binary exists
+            if [ ! -f "${TARBALL_DIR}/newrelic-infra/usr/bin/newrelic-infra" ]; then
+              echo "::error::Main binary not found in tarball: ${TARBALL_DIR}/usr/bin/newrelic-infra"
+              exit 1
+            fi
+
+            # Extract deb
+            DEB="newrelic-infra_systemd_${VERSION}_${ARCH}.deb"
+            DEB_DIR="../extracted/linux/${ARCH}/deb"
+
+            echo "  Extracting deb: ${DEB}"
+            cd "${DEB_DIR}"
+            if ar x "${ROOT_ABS}/${DEB}"; then
+              echo "    ✓ Deb ar archive extracted"
+            else
+              echo "::error::Failed to ar extract ${DEB}"
+              exit 1
+            fi
+
+            if tar xf data.tar.gz; then
+              echo "    ✓ Deb data extracted"
+            else
+              echo "::error::Failed to extract data.tar.gz from ${DEB}"
+              exit 1
+            fi
+
+            # Cleanup deb metadata files
+            rm -f debian-binary control.tar.gz data.tar.gz _gpgbuilder
+
+            # Verify integrations exist
+            for INTEGRATION in nri-docker nri-prometheus; do
+              if [ ! -f "opt/newrelic-infra/newrelic-integrations/bin/${INTEGRATION}" ]; then
+                echo "::error::Integration not found: ${INTEGRATION}"
+                exit 1
+              fi
+            done
+
+            # Verify logging components exist
+            if [ ! -f "var/db/newrelic-infra/newrelic-integrations/logging/out_newrelic.so" ]; then
+              echo "::error::Logging component not found: out_newrelic.so"
+              exit 1
+            fi
+
+            if [ ! -f "var/db/newrelic-infra/newrelic-integrations/logging/parsers.conf" ]; then
+              echo "::error::Logging component not found: parsers.conf"
+              exit 1
+            fi
+
+            cd "${ROOT_ABS}"
+            echo "  ✓ ${ARCH} extraction complete"
+          done
+
+          cd ..
+          echo "✓ Linux extraction complete"
+
+      - name: Repackage windows
+        run: |
+          set -euo pipefail
+          echo "Repackaging Windows artifacts..."
+
+          SRC="extracted/windows/New Relic/newrelic-infra"
+          DEST="dist/windows"
+
+          # Create destination directories
+          mkdir -p "${DEST}/integrations"
+          mkdir -p "${DEST}/logging"
+
+          # Copy main executable
+          cp "${SRC}/newrelic-infra.exe" "${DEST}/newrelic-infra.exe"
+
+          # Copy integrations
+          cp "${SRC}/newrelic-integrations/nri-winservices.exe" "${DEST}/integrations/"
+          cp "${SRC}/newrelic-integrations/windows_exporter.exe" "${DEST}/integrations/"
+          cp "${SRC}/newrelic-integrations/nri-prometheus.exe" "${DEST}/integrations/"
+          cp "${SRC}/newrelic-integrations/nr-winpkg.exe" "${DEST}/integrations/"
+          cp "extracted/nrjmx/usr/lib/nrjmx/nrjmx.jar" "${DEST}/integrations/"
+
+          # Copy logging components
+          cp "${SRC}/newrelic-integrations/logging/fluent-bit.exe" "${DEST}/logging/"
+          cp "${SRC}/newrelic-integrations/logging/fluent-bit.dll" "${DEST}/logging/"
+          cp "${SRC}/newrelic-integrations/logging/parsers.conf" "${DEST}/logging/"
+          cp "${SRC}/newrelic-integrations/logging/out_newrelic.dll" "${DEST}/logging/"
+
+          # Verify repackaging
+          echo "✓ Windows artifacts repackaged:"
+          find "${DEST}" -type f | sort
+
+          # Create ZIP archive
+          echo "Creating windows.zip..."
+          cd dist
+          cd windows
+          zip -r ../windows.zip .
+          cd ../..
+
+          ZIP_SIZE=$(du -h "dist/windows.zip" | cut -f1)
+          echo "✓ Created windows.zip (${ZIP_SIZE})"
+
+          # Cleanup - remove the unzipped directory
+          rm -rf "${DEST}"
+          echo "✓ Cleaned up temporary files"
+
+      - name: Repackage Linux
+        run: |
+          set -euo pipefail
+          echo "Repackaging Linux artifacts..."
+
+          for ARCH in amd64 arm64; do
+            echo "Repackaging ${ARCH}..."
+
+            TARBALL_SRC="extracted/linux/${ARCH}/tarball"
+            DEB_SRC="extracted/linux/${ARCH}/deb"
+            DEST="dist/linux-${ARCH}"
+
+            # Create destination directories
+            mkdir -p "${DEST}/integrations"
+            mkdir -p "${DEST}/logging"
+
+            # Copy main binary
+            cp "${TARBALL_SRC}/newrelic-infra/usr/bin/newrelic-infra" "${DEST}/newrelic-infra"
+
+            # Copy integrations
+            cp "${DEB_SRC}/opt/newrelic-infra/newrelic-integrations/bin/nri-docker" "${DEST}/integrations/"
+            cp "${DEB_SRC}/opt/newrelic-infra/newrelic-integrations/bin/nri-prometheus" "${DEST}/integrations/"
+            cp "extracted/nrjmx/usr/lib/nrjmx/nrjmx.jar" "${DEST}/integrations/"
+
+            # Copy logging components
+            cp "${DEB_SRC}/var/db/newrelic-infra/newrelic-integrations/logging/out_newrelic.so" "${DEST}/logging/"
+            cp "${DEB_SRC}/var/db/newrelic-infra/newrelic-integrations/logging/parsers.conf" "${DEST}/logging/"
+
+            # Verify repackaging
+            echo "  ✓ ${ARCH} artifacts repackaged:"
+            find "${DEST}" -type f | sort
+
+            # Create tar.gz archive
+            echo "  Creating linux-${ARCH}.tar.gz..."
+            cd dist
+            tar czf "linux-${ARCH}.tar.gz" -C "linux-${ARCH}" .
+            cd ..
+
+            TARBALL_SIZE=$(du -h "dist/linux-${ARCH}.tar.gz" | cut -f1)
+            echo "  ✓ Created linux-${ARCH}.tar.gz (${TARBALL_SIZE})"
+
+            # Cleanup - remove the unpacked directory
+            rm -rf "${DEST}"
+          done
+
+          echo "✓ Linux repackaging complete"
+
+      - name: Preserve artifacts before action checkout
+        run: |
+          set -euo pipefail
+
+          # Move artifacts to temp location to survive git clean
+          mkdir -p /tmp/artifacts
+          cp dist/windows.zip /tmp/artifacts/
+          cp dist/linux-amd64.tar.gz /tmp/artifacts/
+          cp dist/linux-arm64.tar.gz /tmp/artifacts/
+          echo "✓ Artifacts preserved"
+
+      - name: Upload dist as artifact (dry run)
+        if: ${{ inputs.dry_run == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-control-dist-${{ steps.validate.outputs.version }}
+          path: /tmp/artifacts/*
+          retention-days: 7
+
+      - name: Upload to Agent Metadata
+        if: ${{ inputs.dry_run != true }}
+        uses: newrelic/agent-metadata-action/send-metadata@399d5ba876e7d03bf6215f8283d72ffb8dc8240b # v1.7.0
+        with:
+          newrelic-client-id: ${{ secrets.NEWRELIC_CLIENT_ID }}
+          newrelic-private-key: ${{ secrets.NEWRELIC_PRIVATE_KEY }}
+          agent-type: 'NRInfra'
+          version: ${{ steps.validate.outputs.version }}
+          oci-registry: ${{ secrets.OCI_REGISTRY }}
+          oci-username: ${{ secrets.OCI_USERNAME }}
+          oci-password: ${{ secrets.OCI_PASSWORD }}
+          newrelic-license-key: ${{ secrets.AGENT_METADATA_ACTION_LICENSE_KEY }} # action owning team license key
+          binaries: |
+            [
+              {
+                "name": "windows-amd64",
+                "path": "/tmp/artifacts/windows.zip",
+                "os": "windows",
+                "arch": "amd64",
+                "format": "zip"
+              },
+              {
+                "name": "linux-amd64",
+                "path": "/tmp/artifacts/linux-amd64.tar.gz",
+                "os": "linux",
+                "arch": "amd64",
+                "format": "tar+gzip"
+              },
+              {
+                "name": "linux-arm64",
+                "path": "/tmp/artifacts/linux-arm64.tar.gz",
+                "os": "linux",
+                "arch": "arm64",
+                "format": "tar+gzip"
+              }
+            ]

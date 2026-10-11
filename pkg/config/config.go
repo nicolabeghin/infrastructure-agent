@@ -869,8 +869,29 @@ type Config struct {
 	// allows to install integrations outside the agent_dir. It has the first priority when the agent is looking for
 	// installed integrations.
 	// Default: ""
+	// Public: Yes
+	CustomPluginInstallationDir string `envconfig:"custom_plugin_installation_dir" public:"true" yaml:"custom_plugin_installation_dir"` //nolint:lll
+
+	// DisablePluginDefaultDirScan, when enabled, stops the agent from scanning the default integration
+	// locations, so it only loads integrations from the explicitly configured locations
+	// (custom_plugin_installation_dir for binaries and plugin_dir for configs). This avoids loading stale or
+	// conflicting integrations from the default locations. It skips the integration binary/definition dirs
+	// under safe_bin_dir (newrelic-integrations, custom-integrations) and agent_dir (custom-integrations,
+	// newrelic-integrations, bundled-plugins, plugins); the default integration config dirs (e.g.
+	// /etc/newrelic-infra/integrations.d and agent_dir/integrations.d); and the legacy
+	// newrelic-infra-plugins.yml files.
+	// Default: false
 	// Public: No
-	CustomPluginInstallationDir string `yaml:"custom_plugin_installation_dir" envconfig:"custom_plugin_installation_dir" public:"false"`
+	DisablePluginDefaultDirScan bool `envconfig:"disable_plugin_default_dir_scan" public:"false" yaml:"disable_plugin_default_dir_scan"` //nolint:lll
+
+	// SafeDirCheckEnabled, when enabled, makes the agent reject and recreate any directory it
+	// manages (the data directory, integration temp dirs, ...) that isn't owned by the current
+	// user or group, or that's writable by group/other and isn't a distinct mount point -
+	// hardening added by PR #2306, with the mount-point and group-ownership exemptions added by
+	// #2325 and #2345. It defaults to false.
+	// Default: false
+	// Public: No
+	SafeDirCheckEnabled bool `envconfig:"safe_dir_check_enabled" public:"false" yaml:"safe_dir_check_enabled"`
 
 	// PluginDir Directory containing integrations configuration files of the integrations. Each integration has his
 	// own configuration file, named by default <integration_name>-config.yml, placed in a predefined location from
@@ -905,20 +926,31 @@ type Config struct {
 
 	// LoggingBinDir folder containing binaries for the log forwarder.
 	// Default: /var/db/newrelic-infra/newrelic-integrations/logging/
-	// Public: No
-	LoggingBinDir string `yaml:"logging_bin_dir" envconfig:"logging_bin_dir" public:"false"`
+	// Public: Yes
+	LoggingBinDir string `envconfig:"logging_bin_dir" public:"true" yaml:"logging_bin_dir"`
 
 	// LoggingHomeDir folder containing plugins and other required files for the log forwarder.
 	// Default (Linux): /var/db/newrelic-infra/newrelic-integrations/logging/
 	// Default (Windows): C:\Program Files\New Relic\newrelic-infra\newrelic-integrations\logging\
-	// Public: No
-	LoggingHomeDir string `yaml:"logging_home_dir" envconfig:"logging_home_dir" public:"false"`
+	// Public: Yes
+	LoggingHomeDir string `envconfig:"logging_home_dir" public:"true" yaml:"logging_home_dir"`
 
 	// LoggingRetryLimit determines the value of the Retry_Limit for the New Relic fluent-bit output plugin.
 	// https://github.com/newrelic/newrelic-fluent-bit-output/blob/7cbb4393aa36e48bad783231182f707037ebf217/README.md#retry-logic
 	// Default: "5"
 	// Public: Yes
 	LoggingRetryLimit string `yaml:"logging_retry_limit" envconfig:"logging_retry_limit" public:"true"`
+
+	// LoggingHTTPClientTimeout sets the HTTP client timeout (in seconds) for the New Relic fluent-bit output plugin.
+	// https://github.com/newrelic/newrelic-fluent-bit-output#httpclienttimeout
+	// Default: "5"
+	// Public: Yes
+	LoggingHTTPClientTimeout string `envconfig:"logging_http_client_timeout" public:"true" yaml:"logging_http_client_timeout"` //nolint:lll
+
+	// LoggingEndpoint overrides the default New Relic logs endpoint used by the Fluent Bit output plugin.
+	// Default: Empty
+	// Public: Yes
+	LoggingEndpoint string `envconfig:"logging_endpoint" public:"true" yaml:"logging_endpoint"`
 
 	// FluentBitExePath is the location from where the agent can execute fluent-bit.
 	// Default (Linux): /opt/td-agent-bit/bin/td-agent-bit
@@ -936,6 +968,13 @@ type Config struct {
 	// Default: /var/db/newrelic-infra/newrelic-integrations/logging/out_newrelic.so
 	// Public: No
 	FluentBitNRLibPath string `yaml:"fluent_bit_nr_lib_path" envconfig:"fluent_bit_nr_lib_path" public:"false"`
+
+	// WinNetworkInterfaceV2 when true, uses GetIfEntry2 (64-bit counters) instead of GetIfEntry (32-bit counters)
+	// for network metrics on Windows.
+	// This flag is kept for backward compatibility and may be removed in the future.
+	// Default: true
+	// Public: Yes
+	WinNetworkInterfaceV2 bool `envconfig:"win_network_interface_v2" public:"true" yaml:"win_network_interface_v2"`
 
 	// HTTPServerEnabled By setting true this configuration parameter (used by statsD integration v1) the agent will
 	//	// open HTTP port (by default, 8001) to receive integration payloads via HTTP.
@@ -968,6 +1007,11 @@ type Config struct {
 	// Default: False
 	// Public: Yes
 	TCPServerEnabled bool `yaml:"tcp_server_enabled" envconfig:"tcp_server_enabled"`
+
+	// TCPServerHost sets the host address the TCP server binds to.
+	// Default: localhost
+	// Public: Yes
+	TCPServerHost string `envconfig:"tcp_server_host" yaml:"tcp_server_host"`
 
 	// TCPServerPort Set the port for tcp server to receive integration payloads.
 	// Default: 8002
@@ -1059,6 +1103,13 @@ type Config struct {
 	// Public: Yes
 	CloudMetadataDisableKeepAlive bool `yaml:"cloud_metadata_disable_keep_alive" envconfig:"cloud_metadata_disable_keep_alive"`
 
+	// OCITagsExclude excludes OCI freeform tags from being emitted as label.* inventory
+	// attributes. Supports glob patterns (e.g. "pipeline-*") to guard against tag churn from
+	// CI/CD pipelines writing tags like last-deploy-date on every deployment.
+	// Default: empty (no exclusions)
+	// Public: Yes
+	OCITagsExclude []string `envconfig:"oci_tags_exclude" yaml:"oci_tags_exclude"`
+
 	// RemoveEntitiesPeriod Defines the frequency to engage the process of deleting entities that haven't been reported
 	// information during the frequency interval. Valid time units are: "s" (seconds), "m" (minutes), "h" (hour).
 	// Default: 48h
@@ -1141,6 +1192,7 @@ type Config struct {
 	// Public: Yes
 	WinRemovableDrives bool `yaml:"win_removable_drives" envconfig:"win_removable_drives" os:"windows"` // enables removable drives in storage sampler
 
+	// (Deprecated)
 	// LegacyStorageSampler Setting this value to true will force the agent to use windows WMI (the legacy method of
 	// the Agent to grab metrics for Windows: e.g StorageSampler) and disable the new method which is using PDH library
 	// Default (amd64): False
@@ -1290,7 +1342,7 @@ type Config struct {
 	// Default (MacOS AMD): /usr/local/var/db/newrelic-infra/tmp
 	// Default (MacOS ARM): /opt/homebrew/var/db/newrelic-infra/tmp
 	// Default (Windows): C:\ProgramData\New Relic\newrelic-infra\tmp
-	// Public: No
+	// Public: Yes
 	AgentTempDir string `envconfig:"agent_temp_dir" yaml:"agent_temp_dir"`
 
 	// ProcessContainerDecoration controls if the ProcessSample gets decorated with Container Information
@@ -1547,15 +1599,17 @@ func (config *Config) populateLogConfig() {
 
 // LogForward log forwarder config values.
 type LogForward struct {
-	Troubleshoot     Troubleshoot
-	ConfigsDir       string
-	HomeDir          string
-	License          string
-	IsFedramp        bool
-	IsStaging        bool
-	ProxyCfg         LogForwardProxy
-	RetryLimit       string
-	FluentBitVerbose bool
+	Troubleshoot      Troubleshoot
+	ConfigsDir        string
+	HomeDir           string
+	License           string
+	Endpoint          string
+	IsFedramp         bool
+	IsStaging         bool
+	ProxyCfg          LogForwardProxy
+	RetryLimit        string
+	HTTPClientTimeout string
+	FluentBitVerbose  bool
 }
 
 type LogForwardProxy struct {
@@ -1569,14 +1623,16 @@ type LogForwardProxy struct {
 // NewLogForward creates a valid log forwarder config.
 func NewLogForward(config *Config, troubleshoot Troubleshoot) LogForward {
 	return LogForward{
-		Troubleshoot:     troubleshoot,
-		ConfigsDir:       config.LoggingConfigsDir,
-		HomeDir:          config.LoggingHomeDir,
-		License:          config.License,
-		IsFedramp:        config.Fedramp,
-		IsStaging:        config.Staging,
-		RetryLimit:       config.LoggingRetryLimit,
-		FluentBitVerbose: config.Log.Level == LogLevelTrace && config.Log.HasIncludeFilter(TracesFieldName, SupervisorTrace),
+		Troubleshoot:      troubleshoot,
+		ConfigsDir:        config.LoggingConfigsDir,
+		HomeDir:           config.LoggingHomeDir,
+		License:           config.License,
+		Endpoint:          config.LoggingEndpoint,
+		IsFedramp:         config.Fedramp,
+		IsStaging:         config.Staging,
+		RetryLimit:        config.LoggingRetryLimit,
+		HTTPClientTimeout: config.LoggingHTTPClientTimeout,
+		FluentBitVerbose:  config.Log.Level == LogLevelTrace && config.Log.HasIncludeFilter(TracesFieldName, SupervisorTrace),
 		ProxyCfg: LogForwardProxy{
 			IgnoreSystemProxy: config.IgnoreSystemProxy,
 			Proxy:             config.Proxy,
@@ -1875,6 +1931,7 @@ func NewConfig() *Config {
 		LoggingRetryLimit:             defaultLoggingRetryLimit,
 		HTTPServerHost:                defaultHTTPServerHost,
 		HTTPServerPort:                defaultHTTPServerPort,
+		TCPServerHost:                 defaultTCPServerHost,
 		TCPServerPort:                 defaultTCPServerPort,
 		StatusServerPort:              defaultStatusServerPort,
 		DockerApiVersion:              DefaultDockerApiVersion,
@@ -1929,6 +1986,7 @@ func NewConfig() *Config {
 		Http:                        NewHttpConfig(),
 		AgentTempDir:                defaultAgentTempDir,
 		ProcessContainerDecoration:  defaultProcessContainerDecoration,
+		WinNetworkInterfaceV2:       defaultWinNetworkInterfaceV2,
 	}
 }
 
@@ -2018,7 +2076,25 @@ func calculateCollectorURL(licenseKey string, staging, fedramp bool) string {
 		return defaultSecureFederalURL
 	}
 
-	return fmt.Sprintf(baseCollectorURL, urlEnvironmentPrefix(staging), urlRegionPrefix(licenseKey))
+	prefix := urlRegionPrefix(licenseKey)
+	domain := nrDomainForRegion(prefix)
+
+	if domain == oldNRDomain {
+		return fmt.Sprintf(baseCollectorDualstackURL, urlEnvironmentPrefix(staging), prefix)
+	}
+
+	return fmt.Sprintf(baseCollectorURL, urlEnvironmentPrefix(staging), prefix, domain)
+}
+
+// nrDomainForRegion returns the NR domain to use based on the URL region prefix.
+// It compares only the first two chars of prefix against newRegions, since subregions
+// (e.g. "jp01") share the same two-char base ("jp") as their parent region.
+func nrDomainForRegion(prefix string) string {
+	if len(prefix) >= 2 && strings.Contains(newRegions, prefix[:2]) {
+		return newNRDomain
+	}
+
+	return oldNRDomain
 }
 
 func calculateIdentityURL(licenseKey string, staging, fedramp bool) string {
@@ -2032,19 +2108,29 @@ func calculateIdentityURL(licenseKey string, staging, fedramp bool) string {
 }
 
 func calculateIdentityProductionURL(licenseKey string) string {
-	// only EU supported
 	if license.IsRegionEU(licenseKey) {
 		return defaultIdentityURLEu
 	}
-	return defaultIdentityURL
+
+	r := license.GetRegionForURL(licenseKey)
+	if r == "" {
+		return defaultIdentityURL
+	}
+
+	return fmt.Sprintf(baseIdentityURLRegion, r)
 }
 
 func calculateIdentityStagingURL(licenseKey string) string {
-	// only EU supported
 	if license.IsRegionEU(licenseKey) {
 		return defaultIdentityStagingURLEu
 	}
-	return defaultIdentityStagingURL
+
+	r := license.GetRegionForURL(licenseKey)
+	if r == "" {
+		return defaultIdentityStagingURL
+	}
+
+	return fmt.Sprintf(baseIdentityStagingURLRegion, r)
 }
 
 func calculateCmdChannelURL(licenseKey string, staging, fedramp bool) string {
@@ -2058,19 +2144,29 @@ func calculateCmdChannelURL(licenseKey string, staging, fedramp bool) string {
 }
 
 func calculateCmdChannelProductionURL(licenseKey string) string {
-	// only EU supported
 	if license.IsRegionEU(licenseKey) {
 		return defaultCmdChannelURLEu
 	}
-	return defaultCmdChannelURL
+
+	r := license.GetRegionForURL(licenseKey)
+	if r == "" {
+		return defaultCmdChannelURL
+	}
+
+	return fmt.Sprintf(baseCmdChannelURLRegion, r)
 }
 
 func calculateCmdChannelStagingURL(licenseKey string) string {
-	// only EU supported
 	if license.IsRegionEU(licenseKey) {
 		return defaultCmdChannelStagingURLEu
 	}
-	return defaultCmdChannelStagingURL
+
+	r := license.GetRegionForURL(licenseKey)
+	if r == "" {
+		return defaultCmdChannelStagingURL
+	}
+
+	return fmt.Sprintf(baseCmdChannelStagingURLRegion, r)
 }
 
 func calculateSelfInstrumentationApmHost(licenseKey string, staging bool, fedramp bool) string {
@@ -2080,15 +2176,21 @@ func calculateSelfInstrumentationApmHost(licenseKey string, staging bool, fedram
 	if fedramp {
 		return defaultSecureFederalAPMCollectorHost
 	}
+
 	return calculateSelfInstrumentationApmProductionHost(licenseKey)
 }
 
 func calculateSelfInstrumentationApmProductionHost(licenseKey string) string {
-	// only EU supported
 	if license.IsRegionEU(licenseKey) {
 		return defaultAPMCollectorHostEu
 	}
-	return defaultAPMCollectorHost
+
+	r := license.GetRegionForURL(licenseKey)
+	if r == "" {
+		return defaultAPMCollectorHost
+	}
+
+	return fmt.Sprintf(baseAPMCollectorHostRegion, r)
 }
 
 func calculateDimensionalMetricURL(collectorURL string, licenseKey string, staging, fedramp bool) string {
@@ -2100,7 +2202,14 @@ func calculateDimensionalMetricURL(collectorURL string, licenseKey string, stagi
 		return defaultSecureFederalMetricURL
 	}
 
-	return fmt.Sprintf(baseDimensionalMetricURL, urlEnvironmentPrefix(staging), urlRegionPrefix(licenseKey))
+	prefix := urlRegionPrefix(licenseKey)
+	domain := nrDomainForRegion(prefix)
+
+	if domain == oldNRDomain {
+		return fmt.Sprintf(baseDimensionalMetricDualstackURL, urlEnvironmentPrefix(staging), prefix)
+	}
+
+	return fmt.Sprintf(baseDimensionalMetricURL, urlEnvironmentPrefix(staging), prefix, domain)
 }
 
 func urlEnvironmentPrefix(staging bool) string {
@@ -2111,15 +2220,26 @@ func urlEnvironmentPrefix(staging bool) string {
 }
 
 func urlRegionPrefix(licenseKey string) string {
+	// leaving this to not change anything for EU, will have to be optimised when we have clarity for
+	// all the regions.
 	if license.IsRegionEU(licenseKey) {
 		return "eu01."
 	}
 
-	return ""
+	r := license.GetRegionForURL(licenseKey)
+	if r == "" {
+		return ""
+	}
+
+	return r + "."
 }
 
 func NormalizeConfig(cfg *Config, cfgMetadata config_loader.YAMLMetadata) (err error) {
 	nlog := clog.WithField("action", "NormalizeConfig")
+
+	// Must happen before any disk.MkdirAll call below (or made later by the rest of the
+	// agent) so the opt-in safe-dir check is in effect from the very first one.
+	disk.SafeDirCheckEnabled.Store(cfg.SafeDirCheckEnabled)
 
 	cfg.IgnoredInventoryPathsMap = make(map[string]struct{})
 	for _, p := range cfg.IgnoredInventoryPaths {
@@ -2245,8 +2365,15 @@ func NormalizeConfig(cfg *Config, cfgMetadata config_loader.YAMLMetadata) (err e
 		cfg.FluentBitNRLibPath = filepath.Join(cfg.LoggingHomeDir, defaultFluentBitNRLib)
 	}
 
-	cfg.PluginInstanceDirs = helpers.RemoveEmptyAndDuplicateEntries(
-		[]string{cfg.PluginDir, defaultPluginInstanceDir, filepath.Join(cfg.AgentDir, defaultPluginActiveConfigsDir)})
+	// plugin_dir is the explicitly configured integration config dir and is always scanned. The default
+	// config dirs are skipped when DisablePluginDefaultDirScan is set.
+	pluginInstanceDirs := []string{cfg.PluginDir}
+	if !cfg.DisablePluginDefaultDirScan {
+		pluginInstanceDirs = append(pluginInstanceDirs,
+			defaultPluginInstanceDir, filepath.Join(cfg.AgentDir, defaultPluginActiveConfigsDir))
+	}
+
+	cfg.PluginInstanceDirs = helpers.RemoveEmptyAndDuplicateEntries(pluginInstanceDirs)
 
 	if cfg.Log.File == "" && runtime.GOOS == "windows" {
 		cfg.Log.File = "true"
@@ -2257,8 +2384,13 @@ func NormalizeConfig(cfg *Config, cfgMetadata config_loader.YAMLMetadata) (err e
 		nlog.WithField("LogFile", cfg.Log.File).Debug("Logging to file.")
 	}
 
-	// Caution: PluginConfigFiles is ALWAYS defined with the default value. Is this right? Be aware any change could affect backwards compatibilities.
-	cfg.PluginConfigFiles = defaultPluginConfigFiles
+	// PluginConfigFiles defaults to the standard newrelic-infra-plugins.yml locations.
+	// When DisablePluginDefaultDirScan is set these files are skipped.
+	if cfg.DisablePluginDefaultDirScan {
+		cfg.PluginConfigFiles = []string{}
+	} else {
+		cfg.PluginConfigFiles = defaultPluginConfigFiles
+	}
 
 	if cfg.PayloadCompressionLevel < gzip.NoCompression || cfg.PayloadCompressionLevel > gzip.BestCompression {
 		nlog.WithFields(logrus.Fields{
@@ -2358,11 +2490,6 @@ func NormalizeConfig(cfg *Config, cfgMetadata config_loader.YAMLMetadata) (err e
 				Warn("couldn't retrieve the current user's home, the HOME env variable won't be set for running facter")
 		}
 		cfg.FacterHomeDir = home
-	}
-
-	// force WMI sampler on Windows 32-bit
-	if cfg.LegacyStorageSampler == false && runtime.GOOS == "windows" && runtime.GOARCH == "386" {
-		cfg.LegacyStorageSampler = true
 	}
 
 	// DockerApiVersion default value defined in NewConfig

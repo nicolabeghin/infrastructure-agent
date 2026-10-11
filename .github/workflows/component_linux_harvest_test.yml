@@ -3,6 +3,10 @@ name: .. 🚧 Linux | Run harvest tests
 on:
   workflow_call:
 
+
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Linux harvest tests
@@ -17,6 +21,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
+          check-latest: true
 
       - name: Setup node
         run: sudo apt install musl-dev

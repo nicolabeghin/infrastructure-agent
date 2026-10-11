@@ -5,6 +5,7 @@
 package logs
 
 import (
+	"fmt"
 	"os"
 	"regexp"
 	"runtime"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v2"
 )
 
 const windowsServer2016BuildNumber = 14393
@@ -22,11 +25,12 @@ const windowsServer2016BuildNumber = 14393
 var windowsBuildNumberRegex = regexp.MustCompile(`.*Build ([0-9]+)`)
 
 var logFwdCfg = config.LogForward{
-	HomeDir:    "/var/db/newrelic-infra/newrelic-integrations/logging",
-	License:    "licenseKey",
-	IsStaging:  false,
-	IsFedramp:  false,
-	RetryLimit: "5",
+	HomeDir:           "/var/db/newrelic-infra/newrelic-integrations/logging",
+	License:           "licenseKey",
+	IsStaging:         false,
+	IsFedramp:         false,
+	RetryLimit:        "5",
+	HTTPClientTimeout: "10",
 	ProxyCfg: config.LogForwardProxy{
 		IgnoreSystemProxy: true,
 		Proxy:             "https://https-proxy:3129",
@@ -58,7 +62,6 @@ func inputRecordModifier(i string, m string) FBCfgFilter {
 
 func withFeedramp(cfg config.LogForward) config.LogForward {
 	cfg.IsFedramp = true
-
 	return cfg
 }
 
@@ -72,16 +75,70 @@ var outputBlock = FBCfgOutput{
 	CABundleDir:       "/cabundles",
 	ValidateCerts:     true,
 	Retry_Limit:       "5",
+	HTTPClientTimeout: "10",
+}
+
+func TestNewNROutput_JPRegion(t *testing.T) {
+	cfg := &config.LogForward{
+		License: "jpxxxx6789012345678901234567890123456789",
+	}
+
+	output := newNROutput(cfg)
+
+	assert.Equal(t, fmt.Sprintf(baseEndpointRegion, "jp"), output.Endpoint)
+}
+
+func TestNewNROutput_EURegion(t *testing.T) {
+	cfg := &config.LogForward{
+		License: "eu01xx6789012345678901234567890123456789",
+	}
+
+	output := newNROutput(cfg)
+
+	assert.Equal(t, euEndpoint, output.Endpoint)
+}
+
+func TestNewNROutput_USRegion(t *testing.T) {
+	cfg := &config.LogForward{
+		License: "0123456789012345678901234567890123456789",
+	}
+
+	output := newNROutput(cfg)
+
+	assert.Empty(t, output.Endpoint)
+}
+
+func TestNewNROutput_CustomEndpointOverride(t *testing.T) {
+	cfg := &config.LogForward{
+		License:  "eu01xx6789012345678901234567890123456789",
+		Endpoint: "https://custom-log.example.com/log/v1",
+	}
+
+	output := newNROutput(cfg)
+
+	assert.Equal(t, "https://custom-log.example.com/log/v1", output.Endpoint)
 }
 
 func TestNewFBConf(t *testing.T) {
 	outputBlockFedramp := outputBlock
 	outputBlockFedramp.Endpoint = fedrampEndpoint
+	outputBlockJP := outputBlock
+	outputBlockJP.LicenseKey = "jpxxxx6789012345678901234567890123456789"
+	outputBlockJP.Endpoint = fmt.Sprintf(baseEndpointRegion, "jp")
+	outputBlockCustom := outputBlock
+	outputBlockCustom.Endpoint = "https://custom-log.example.com/log/v1"
 	outputBlockMultipleRetries := outputBlock
 
 	logFwdCfgMultipleRetries := logFwdCfg
 	logFwdCfgMultipleRetries.RetryLimit = "4"
 	outputBlockMultipleRetries.Retry_Limit = "4"
+	outputBlockMultipleRetries.HTTPClientTimeout = "10"
+
+	logFwdCfgJP := logFwdCfg
+	logFwdCfgJP.License = "jpxxxx6789012345678901234567890123456789"
+
+	logFwdCfgCustom := logFwdCfg
+	logFwdCfgCustom.Endpoint = "https://custom-log.example.com/log/v1"
 
 	tests := []struct {
 		name   string
@@ -95,6 +152,32 @@ func TestNewFBConf(t *testing.T) {
 			FBCfg{
 				Inputs:  []FBCfgInput{},
 				Filters: []FBCfgFilter{},
+			},
+		},
+		{
+			"custom endpoint", logFwdCfgCustom,
+			LogsCfg{{
+				Name: "log-file",
+				File: "file.path",
+			}},
+			FBCfg{
+				Inputs: []FBCfgInput{
+					{
+						Name:           "tail",
+						Tag:            "log-file",
+						DB:             dbDbPath,
+						Path:           "file.path",
+						BufferMaxSize:  "128k",
+						MemBufferLimit: "16384k",
+						SkipLongLines:  "On",
+						PathKey:        "filePath",
+					},
+				},
+				Filters: []FBCfgFilter{
+					inputRecordModifier("tail", "log-file"),
+					filterEntityBlock,
+				},
+				Output: outputBlockCustom,
 			},
 		},
 		{"single input", logFwdCfg, LogsCfg{
@@ -168,6 +251,30 @@ func TestNewFBConf(t *testing.T) {
 				filterEntityBlock,
 			},
 			Output: outputBlockFedramp,
+		}},
+		{"single input jp", logFwdCfgJP, LogsCfg{
+			{
+				Name: "log-file",
+				File: "file.path",
+			},
+		}, FBCfg{
+			Inputs: []FBCfgInput{
+				{
+					Name:           "tail",
+					Tag:            "log-file",
+					DB:             dbDbPath,
+					Path:           "file.path",
+					BufferMaxSize:  "128k",
+					MemBufferLimit: "16384k",
+					SkipLongLines:  "On",
+					PathKey:        "filePath",
+				},
+			},
+			Filters: []FBCfgFilter{
+				inputRecordModifier("tail", "log-file"),
+				filterEntityBlock,
+			},
+			Output: outputBlockJP,
 		}},
 		{"input file + filter", logFwdCfg, LogsCfg{
 			{
@@ -694,6 +801,32 @@ func TestNewFBConf(t *testing.T) {
 			},
 			Filters: []FBCfgFilter{
 				inputRecordModifier("tcp", "tcp-test"),
+				filterEntityBlock,
+			},
+			Output: outputBlock,
+		}},
+		{"file input with unicodeEncoding", logFwdCfg, LogsCfg{
+			{
+				Name:            "mssql-log",
+				File:            "D:\\logs\\ERRORLOG",
+				UnicodeEncoding: "UTF-16LE",
+			},
+		}, FBCfg{
+			Inputs: []FBCfgInput{
+				{
+					Name:            "tail",
+					Tag:             "mssql-log",
+					DB:              dbDbPath,
+					Path:            "D:\\logs\\ERRORLOG",
+					BufferMaxSize:   "128k",
+					MemBufferLimit:  "16384k",
+					SkipLongLines:   "On",
+					PathKey:         "filePath",
+					UnicodeEncoding: "UTF-16LE",
+				},
+			},
+			Filters: []FBCfgFilter{
+				inputRecordModifier("tail", "mssql-log"),
 				filterEntityBlock,
 			},
 			Output: outputBlock,
@@ -2118,4 +2251,96 @@ func TestMlParserFBCfgWithMultipleParsers(t *testing.T) {
 	assert.Empty(t, err)
 	assert.Equal(t, "/path/to/fb/parsers", extCfg.ParsersFilePath)
 	assert.Equal(t, expected, result)
+}
+
+func TestUnicodeEncodingFBCfgFormat(t *testing.T) {
+	expected := `
+[INPUT]
+    Name tail
+    Path /path/to/folder/*
+    Buffer_Max_Size 32k
+    Skip_Long_Lines On
+    Multiline.Parser multiline_mssql
+    Unicode.Encoding UTF-16LE
+    Path_Key filePath
+    Tag  mssql_error_log
+    DB   fb.db
+
+[FILTER]
+    Name  record_modifier
+    Match mssql_error_log
+    Record "fb.input" "tail"
+
+[FILTER]
+    Name  record_modifier
+    Match *
+    Record "entity.guid.INFRA" "testGUID"
+    Record "fb.source" "nri-agent"
+
+[OUTPUT]
+    Name                newrelic
+    Match               *
+    licenseKey          ${NR_LICENSE_KEY_ENV_VAR}
+    validateProxyCerts  false
+`
+
+	fbCfg := FBCfg{
+		Inputs: []FBCfgInput{
+			{
+				Name:            "tail",
+				Tag:             "mssql_error_log",
+				DB:              "fb.db",
+				Path:            "/path/to/folder/*",
+				BufferMaxSize:   "32k",
+				SkipLongLines:   "On",
+				MultilineParser: "multiline_mssql",
+				UnicodeEncoding: "UTF-16LE",
+				PathKey:         "filePath",
+			},
+		},
+		Filters: []FBCfgFilter{
+			{
+				Name:  "record_modifier",
+				Match: "mssql_error_log",
+				Records: map[string]string{
+					"fb.input": "tail",
+				},
+			},
+			{
+				Name:  "record_modifier",
+				Match: "*",
+				Records: map[string]string{
+					"entity.guid.INFRA": "testGUID",
+					"fb.source":         "nri-agent",
+				},
+			},
+		},
+		Output: FBCfgOutput{
+			Name:       "newrelic",
+			Match:      "*",
+			LicenseKey: "licenseKey",
+		},
+	}
+
+	result, _, err := fbCfg.Format()
+	require.NoError(t, err)
+	assert.Equal(t, expected, result)
+}
+
+func TestUnicodeEncodingYAMLTag(t *testing.T) {
+	yamlInput := `
+logs:
+  - name: mssql-log
+    file: /logs/ERRORLOG
+    Unicode.Encoding: UTF-16LE
+`
+
+	var cfg struct {
+		Logs LogsCfg `yaml:"logs"`
+	}
+
+	require.NoError(t, yaml.Unmarshal([]byte(yamlInput), &cfg))
+
+	require.Len(t, cfg.Logs, 1)
+	assert.Equal(t, "UTF-16LE", cfg.Logs[0].UnicodeEncoding)
 }

@@ -8,6 +8,11 @@ on:
     tags-ignore:
       - '**'
 
+
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
 
   CodeQL-Build:
@@ -20,6 +25,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
+          check-latest: true
 
       - name: Validate code
         run: make deps

@@ -3,13 +3,17 @@ name: .. 🚧 macOS | Run harvest tests
 on:
   workflow_call:
 
+
+permissions:
+  contents: read
+
 jobs:
   harvest-test-macos:
     name: MacOS harvest tests
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ macos-13, macos-14, macos-15 ]
+        os: [ macos-14, macos-15 ]
     steps:
       - uses: actions/checkout@v2
 
@@ -17,6 +21,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version-file: 'go.mod'
+          check-latest: true
 
       - name: Running Harvest tests
         run: sudo -E make linux/harvest-tests

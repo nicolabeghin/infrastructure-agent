@@ -14,6 +14,22 @@ can be found at https://github.com/newrelic/infrastructure-agent/.
 
 
 
+## [github.com/Azure/azure-sdk-for-go/sdk/azidentity](https://github.com/Azure/azure-sdk-for-go)
+
+Distributed under the following license(s):
+
+* MIT
+
+
+
+## [github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets](https://github.com/Azure/azure-sdk-for-go)
+
+Distributed under the following license(s):
+
+* MIT
+
+
+
 ## [github.com/Microsoft/go-winio](https://github.com/Microsoft/go-winio)
 
 Distributed under the following license(s):
@@ -95,14 +111,6 @@ Distributed under the following license(s):
 
 
 ## [github.com/coreos/go-systemd/v22](https://github.com/coreos/go-systemd)
-
-Distributed under the following license(s):
-
-* Apache-2.0
-
-
-
-## [github.com/docker/docker](https://github.com/docker/docker)
 
 Distributed under the following license(s):
 
@@ -198,6 +206,22 @@ Distributed under the following license(s):
 
 
 
+## [github.com/moby/moby/api](https://github.com/moby/moby)
+
+Distributed under the following license(s):
+
+* Apache-2.0
+
+
+
+## [github.com/moby/moby/client](https://github.com/moby/moby)
+
+Distributed under the following license(s):
+
+* Apache-2.0
+
+
+
 ## [github.com/newrelic/go-agent/v3](https://github.com/newrelic/go-agent)
 
 Distributed under the following license(s):
@@ -239,6 +263,14 @@ Distributed under the following license(s):
 
 
 ## [github.com/opencontainers/runtime-spec](https://github.com/opencontainers/runtime-spec)
+
+Distributed under the following license(s):
+
+* Apache-2.0
+
+
+
+## [github.com/oracle/oci-go-sdk/v65](https://github.com/oracle/oci-go-sdk)
 
 Distributed under the following license(s):
 

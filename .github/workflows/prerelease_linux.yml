@@ -6,6 +6,10 @@ on:
     tags:
       - '*'
 
+
+permissions:
+  contents: read
+
 jobs:
   unit-test:
     uses: ./.github/workflows/component_linux_unit_test.yml
@@ -20,6 +24,8 @@ jobs:
 
   packaging-amd64:
     needs: [unit-test, proxy-tests]
+    permissions:
+      contents: write # calls component_linux_packaging.yml which uploads packages to GH release assets
     uses: ./.github/workflows/component_linux_packaging.yml
     secrets:
       DOCKER_HUB_ID: ${{secrets.OHAI_DOCKER_HUB_ID}}
@@ -34,6 +40,8 @@ jobs:
   
   packaging-amd64-fips:
     needs: [unit-test, proxy-tests]
+    permissions:
+      contents: write # calls component_linux_packaging.yml which uploads packages to GH release assets
     uses: ./.github/workflows/component_linux_packaging.yml
     secrets:
       DOCKER_HUB_ID: ${{secrets.OHAI_DOCKER_HUB_ID}}
@@ -49,6 +57,8 @@ jobs:
 
   packaging-arm:
     needs: [unit-test, proxy-tests]
+    permissions:
+      contents: write # calls component_linux_packaging.yml which uploads packages to GH release assets
     uses: ./.github/workflows/component_linux_packaging.yml
     secrets:
       DOCKER_HUB_ID: ${{secrets.OHAI_DOCKER_HUB_ID}}
@@ -63,6 +73,8 @@ jobs:
 
   packaging-arm64:
     needs: [unit-test, proxy-tests]
+    permissions:
+      contents: write # calls component_linux_packaging.yml which uploads packages to GH release assets
     uses: ./.github/workflows/component_linux_packaging.yml
     secrets:
       DOCKER_HUB_ID: ${{secrets.OHAI_DOCKER_HUB_ID}}
@@ -77,6 +89,8 @@ jobs:
 
   packaging-arm64-fips:
     needs: [unit-test, proxy-tests]
+    permissions:
+      contents: write # calls component_linux_packaging.yml which uploads packages to GH release assets
     uses: ./.github/workflows/component_linux_packaging.yml
     secrets:
       DOCKER_HUB_ID: ${{secrets.OHAI_DOCKER_HUB_ID}}
@@ -92,6 +106,8 @@ jobs:
 
   packaging-legacy:
     needs: [unit-test, proxy-tests]
+    permissions:
+      contents: write # calls component_linux_packaging.yml which uploads packages to GH release assets
     uses: ./.github/workflows/component_linux_packaging.yml
     secrets:
       DOCKER_HUB_ID: ${{secrets.OHAI_DOCKER_HUB_ID}}
@@ -119,6 +135,9 @@ jobs:
 
   docker-trivy-critical:
     needs: [packaging-docker]
+    permissions:
+      contents: read
+      security-events: write # calls component_trivy.yml which uploads SARIF results
     uses: ./.github/workflows/component_trivy.yml
     with:
       tag: "${{ github.event.release.tag_name }}-rc"
@@ -140,6 +159,9 @@ jobs:
 
   docker-fips-trivy-critical:
     needs: [packaging-docker-fips]
+    permissions:
+      contents: read
+      security-events: write # calls component_trivy.yml which uploads SARIF results
     uses: ./.github/workflows/component_trivy.yml
     with:
       tag: "${{ github.event.release.tag_name }}-rc"
@@ -178,6 +200,9 @@ jobs:
 
   test-prerelease-linux:
     needs: [molecule-packaging-tests]
+    permissions:
+      contents: read
+      id-token: write # calls component_prerelease_testing.yml which needs AWS OIDC auth
     uses: ./.github/workflows/component_prerelease_testing.yml
     with:
       PLATFORM: "linux"
@@ -188,6 +213,9 @@ jobs:
       
   canaries-linux:
     needs: [test-prerelease-linux]
+    permissions:
+      contents: read
+      id-token: write # calls component_canaries.yml which needs AWS OIDC auth
     uses: ./.github/workflows/component_canaries.yml
     with:
       PLATFORM: "linux"
@@ -209,6 +237,9 @@ jobs:
 
   prune-previous-canaries-linux:
     needs: [canaries-linux, get_previous_tag]
+    permissions:
+      contents: read
+      id-token: write # calls component_canaries_prune.yml which needs AWS OIDC auth
     uses: ./.github/workflows/component_canaries_prune.yml
     with:
       PLATFORM: "linux"

@@ -1,0 +1,125 @@
+name: Publish Infrastructure Agent Release Notes
+
+on:
+  # to be enabled once stable
+  # release:
+  #   types:
+  #     - released
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish docs for (e.g. 1.55.0)'
+        required: true
+        type: string
+
+env:
+  DESTINATION_REPO: newrelic/docs-website
+  DESTINATION_FOLDER: src/content/docs/release-notes/infrastructure-release-notes/infrastructure-agent-release-notes
+
+jobs:
+  publish-release-notes:
+    name: Create and Publish Release Notes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag and set names
+        id: meta
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          cleaned=$(echo "$TAG" | sed 's/\./-/g')
+          version_nodots=$(echo "$TAG" | tr -d '.')
+          echo "agent_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "branch_name=infra-agent-release-notes-${cleaned}" >> $GITHUB_OUTPUT
+          echo "notes_file=new-relic-infrastructure-agent-${version_nodots}.mdx" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes file
+        run: .github/workflows/scripts/generate_release_notes.sh "${{ steps.meta.outputs.agent_tag }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Append support statement
+        run: |
+          cat >> "${{ steps.meta.outputs.notes_file }}" << 'EOF'
+
+          ### Support statement:
+
+          A new version of the agent has been released. Follow standard procedures to [update the Infrastructure agent](/docs/infrastructure/install-configure-manage-infrastructure/update-or-uninstall/update-infrastructure-agent).
+
+          We recommend updating to the latest agent version as soon as it's available. If you can't upgrade to the latest version, update your agents to a version no more than 90 days old. Read more about [keeping agents up to date](https://docs.newrelic.com/docs/new-relic-solutions/new-relic-one/install-configure/update-new-relic-agent/).
+
+          See the [New Relic Infrastructure agent EOL policy](https://docs.newrelic.com/docs/infrastructure/infrastructure-agent/infrastructure-agent-eol-policy/) for information about agent releases and support dates.
+          EOF
+
+      - name: Push release notes to docs-website branch
+        env:
+          GH_TOKEN: ${{ secrets.OHAI_BOT_GITHUB_TOKEN }}
+          REPO: "${{ env.DESTINATION_REPO }}"
+          FOLDER: "${{ env.DESTINATION_FOLDER }}"
+          BRANCH: "${{ steps.meta.outputs.branch_name }}"
+          NOTES_FILE: "${{ steps.meta.outputs.notes_file }}"
+          COMMIT_MESSAGE: "chore(infrastructure agent): add release notes for v${{ steps.meta.outputs.agent_tag }}"
+        run: |
+          set -e
+          NOTES_PATH="$(pwd)/${NOTES_FILE}"
+
+          git config --global user.email "coreint-dev@newrelic.com"
+          git config --global user.name "newrelic-coreint-bot"
+
+          CLONE_DIR="$(mktemp -d)"
+          git clone --single-branch --branch develop "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$CLONE_DIR"
+          cd "$CLONE_DIR"
+
+          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null 2>&1; then
+            echo "Branch $BRANCH already exists on remote — deleting it so it's recreated fresh from develop"
+            git push origin --delete "$BRANCH"
+          fi
+
+          echo "Creating branch $BRANCH from develop"
+          git checkout -b "$BRANCH"
+          mkdir -p "$FOLDER"
+          cp "$NOTES_PATH" "$FOLDER/"
+          git add .
+          git commit --message "$COMMIT_MESSAGE"
+          git push -u origin "HEAD:$BRANCH"
+
+      - name: Create pull request
+        run: |
+          existing_pr=$(gh pr list --repo "$REPO" --head "$HEAD" --state open --json number --jq 'length')
+          if [ "$existing_pr" != "0" ]; then
+            echo "Open PR already exists for branch $HEAD — skipping creation"
+          else
+            gh pr create --base "develop" --repo "$REPO" --head "$HEAD" --title "$TITLE" --body "$BODY"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.OHAI_BOT_GITHUB_TOKEN }}
+          REPO: "https://github.com/${{ env.DESTINATION_REPO }}"
+          HEAD: "${{ steps.meta.outputs.branch_name }}"
+          TITLE: "Infrastructure Agent Release Notes for v${{ steps.meta.outputs.agent_tag }}"
+          BODY: "This is an automated PR generated when the Infrastructure agent is released. Please merge as soon as possible."
+
+  delete-branch-on-fail:
+    name: Delete branch on fail
+    needs: [publish-release-notes]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: failure()
+    steps:
+      - name: Checkout docs-website
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.OHAI_BOT_GITHUB_TOKEN }}
+          repository: ${{ env.DESTINATION_REPO }}
+
+      - name: Delete branch
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          cleaned=$(echo "$TAG" | sed 's/\./-/g')
+          git push origin --delete "infra-agent-release-notes-${cleaned}" --force || true

@@ -3,9 +3,9 @@
         This script creates the Newrelic Infrastructure Agent msi package.
 #>
 param (
-    # Target architecture: amd64 (default) or 386
+    # Target architecture: amd64 only (32-bit/386 support deprecated)
     [string]$integration="none",
-    [ValidateSet("amd64", "386")]
+    [ValidateSet("amd64")]
     [string]$arch="amd64",
     [string]$version="0.0.0",
 
@@ -27,7 +27,6 @@ if ($lastExitCode -ne 0) {
     Write-Output "Failed to embed integration"
     exit -1
 }
-
 Write-Output "===> Checking MSBuild.exe..."
 $msBuild = (Get-ItemProperty hklm:\software\Microsoft\MSBuild\ToolsVersions\4.0).MSBuildToolsPath
 if ($msBuild.Length -eq 0) {

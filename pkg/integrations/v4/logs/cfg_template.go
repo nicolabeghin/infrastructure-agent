@@ -23,6 +23,9 @@ var fbConfigFormat = `{{- range .Inputs }}
     {{- if .MultilineParser }}
     Multiline.Parser {{ .MultilineParser }}
     {{- end }}
+    {{- if .UnicodeEncoding }}
+    Unicode.Encoding {{ .UnicodeEncoding }}
+    {{- end }}
     {{- if .PathKey }}
     Path_Key {{ .PathKey }}
     {{- end }}
@@ -132,6 +135,9 @@ var fbConfigFormat = `{{- range .Inputs }}
     {{- end }}
     {{- if .Output.Retry_Limit}}
     Retry_Limit         {{ .Output.Retry_Limit }}
+    {{- end }}
+    {{- if .Output.HTTPClientTimeout}}
+    httpClientTimeout   {{ .Output.HTTPClientTimeout }}
     {{- end }}
     {{- if .Output.SendMetrics}}
     sendMetrics         {{ .Output.SendMetrics}}

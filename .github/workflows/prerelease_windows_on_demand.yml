@@ -17,6 +17,10 @@ on:
       - 'prerelease-on-demand_*'
 
 
+
+permissions:
+  contents: read
+
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   PFX_CERTIFICATE_BASE64: ${{ secrets.OHAI_PFX_CERTIFICATE_BASE64 }} # base64 encoded
@@ -41,7 +45,7 @@ jobs:
     runs-on: windows-2025
     strategy:
       matrix:
-        goarch: [ amd64, 386 ]
+        goarch: [ amd64 ]
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -52,6 +56,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version-file: 'go.mod'
+          check-latest: true
 
       - name: Get PFX certificate from GH secrets
         shell: bash

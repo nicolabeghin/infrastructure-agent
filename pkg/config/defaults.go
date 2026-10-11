@@ -13,24 +13,36 @@ const (
 	LogFormatJSON = "json"
 
 	// Non configurable stuff
-	defaultIdentityURLEu                 = "https://identity-api.dualstack.eu.newrelic.com"
-	defaultIdentityStagingURLEu          = "https://staging-identity-api.dualstack.eu.newrelic.com"
-	defaultCmdChannelURLEu               = "https://infrastructure-command-api.dualstack.eu.newrelic.com"
-	defaultCmdChannelStagingURLEu        = "https://staging-infrastructure-command-api.dualstack.eu.newrelic.com"
-	defaultCmdChannelURL                 = "https://infrastructure-command-api.dualstack.newrelic.com"
-	defaultCmdChannelStagingURL          = "https://staging-infrastructure-command-api.dualstack.newrelic.com"
-	defaultIdentityURL                   = "https://identity-api.dualstack.newrelic.com"
-	defaultIdentityStagingURL            = "https://staging-identity-api.dualstack.newrelic.com"
-	baseCollectorURL                     = "https://%sinfra-api.dualstack.%snr-data.net"
-	baseDimensionalMetricURL             = "https://%smetric-api.dualstack.%snewrelic.com"
-	defaultSecureFederalURL              = "https://gov-infra-api.dualstack.newrelic.com"
-	defaultSecureFederalMetricURL        = "https://gov-metric-api.dualstack.newrelic.com"
-	defaultSecureFedralIdentityURL       = "https://gov-identity-api.dualstack.newrelic.com"
-	defaultSecureFedralCmdChannelURL     = "https://gov-infrastructure-command-api.dualstack.newrelic.com"
+	defaultIdentityURLEu             = "https://identity-api.dualstack.eu.newrelic.com"
+	defaultIdentityStagingURLEu      = "https://staging-identity-api.dualstack.eu.newrelic.com"
+	defaultCmdChannelURLEu           = "https://infrastructure-command-api.dualstack.eu.newrelic.com"
+	defaultCmdChannelStagingURLEu    = "https://staging-infrastructure-command-api.dualstack.eu.newrelic.com"
+	defaultCmdChannelURL             = "https://infrastructure-command-api.dualstack.newrelic.com"
+	defaultCmdChannelStagingURL      = "https://staging-infrastructure-command-api.dualstack.newrelic.com"
+	defaultIdentityURL               = "https://identity-api.dualstack.newrelic.com"
+	defaultIdentityStagingURL        = "https://staging-identity-api.dualstack.newrelic.com"
+	baseCollectorURL                 = "https://%sinfra-api.%s%s"
+	baseDimensionalMetricURL         = "https://%smetric-api.%s%s"
+	defaultSecureFederalURL          = "https://gov-infra-api.newrelic.com"
+	defaultSecureFederalMetricURL    = "https://gov-metric-api.newrelic.com"
+	defaultSecureFedralIdentityURL   = "https://gov-identity-api.newrelic.com"
+	defaultSecureFedralCmdChannelURL = "https://gov-infrastructure-command-api.newrelic.com"
+	// Dualstack (IPv4+IPv6) templates, used where no regional (e.g. JP) endpoint applies.
+	// https://docs.newrelic.com/docs/new-relic-solutions/get-started/networks/#new-relic-dualstack-endpoints
+	baseCollectorDualstackURL            = "https://%sinfra-api.dualstack.%snr-data.net"
+	baseDimensionalMetricDualstackURL    = "https://%smetric-api.dualstack.%snr-data.net"
 	defaultAPMCollectorHost              = "collector.newrelic.com"
 	defaultAPMCollectorHostEu            = "collector.eu.newrelic.com"
 	defaultSecureFederalAPMCollectorHost = "gov-collector.newrelic.com"
 	defaultAPMCollectorHostStaging       = "staging-collector.newrelic.com"
+	baseIdentityURLRegion                = "https://identity-api.%s.nr-data.net"
+	baseIdentityStagingURLRegion         = "https://staging-identity-api.%s.nr-data.net"
+	baseCmdChannelURLRegion              = "https://infrastructure-command-api.%s.nr-data.net"
+	baseCmdChannelStagingURLRegion       = "https://staging-infrastructure-command-api.%s.nr-data.net"
+	baseAPMCollectorHostRegion           = "collector.%s.nr-data.net"
+	newRegions                           = "jp" // add new regions to the same string e.g. "jp,in"
+	newNRDomain                          = "nr-data.net"
+	oldNRDomain                          = "newrelic.com"
 )
 
 // Default configurable values
@@ -71,6 +83,7 @@ var (
 	defaultMaxProcs                      = 1
 	defaultHTTPServerHost                = "localhost"
 	defaultHTTPServerPort                = 8001
+	defaultTCPServerHost                 = "localhost"
 	defaultTCPServerPort                 = 8002
 	defaultStatusServerPort              = 8003
 	defaultIpData                        = true
@@ -107,6 +120,7 @@ var (
 	defaultProxyValidateCerts            = false
 	defaultProxyConfigPlugin             = true
 	defaultWinRemovableDrives            = true
+	defaultWinNetworkInterfaceV2         = true
 	defaultIncludeMetricsMatcherConfig   = IncludeMetricsMap{}
 	defaultExcludeMetricsMatcherConfig   = ExcludeMetricsMap{}
 	defaultRegisterMaxRetryBoSecs        = 60

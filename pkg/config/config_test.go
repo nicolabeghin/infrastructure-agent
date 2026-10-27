@@ -311,8 +311,8 @@ agent_dir: /my/overriden/agent/dir
 
 	cfg, err := LoadConfig(f.Name())
 	c.Assert(cfg.PidFile, Equals, defaultPidFile)
-	c.Assert(cfg.MetricURL, Equals, "https://metric-api.newrelic.com")
-	c.Assert(cfg.CollectorURL, Equals, "https://infra-api.newrelic.com")
+	c.Assert(cfg.MetricURL, Equals, "https://metric-api.dualstack.nr-data.net")
+	c.Assert(cfg.CollectorURL, Equals, "https://infra-api.dualstack.nr-data.net")
 	c.Assert(cfg.AgentDir, Equals, "/my/overriden/agent/dir")
 	c.Assert(cfg.AppDataDir, Equals, defaultAppDataDir)
 	c.Assert(cfg.LogToStdout, Equals, defaultLogToStdout)
@@ -388,13 +388,13 @@ func (s *ConfigSuite) TestCalculateCollectorURL(c *C) {
 		fedramp   bool
 	}{
 		// non-region license, staging false
-		{license: "0123456789012345678901234567890123456789", expectURL: "https://infra-api.newrelic.com", staging: false, fedramp: false},
+		{license: "0123456789012345678901234567890123456789", expectURL: "https://infra-api.dualstack.nr-data.net", staging: false, fedramp: false},
 		// non-region license, staging true
-		{license: "0123456789012345678901234567890123456789", expectURL: "https://staging-infra-api.newrelic.com", staging: true, fedramp: false},
+		{license: "0123456789012345678901234567890123456789", expectURL: "https://staging-infra-api.dualstack.nr-data.net", staging: true, fedramp: false},
 		// two letter region eu
-		{license: "eu01xx6789012345678901234567890123456789", expectURL: "https://infra-api.eu.newrelic.com", staging: false, fedramp: false},
+		{license: "eu01xx6789012345678901234567890123456789", expectURL: "https://infra-api.dualstack.eu01.nr-data.net", staging: false, fedramp: false},
 		// two letter region eu, staging
-		{license: "eu01xx6789012345678901234567890123456789", expectURL: "https://staging-infra-api.eu.newrelic.com", staging: true, fedramp: false},
+		{license: "eu01xx6789012345678901234567890123456789", expectURL: "https://staging-infra-api.dualstack.eu01.nr-data.net", staging: true, fedramp: false},
 		// two letter region jp
 		{
 			license:   "jpxxxx6789012345678901234567890123456789",
@@ -434,7 +434,7 @@ func (s *ConfigSuite) TestCalculateDimensionalMetricURL(c *C) {
 			"",
 			false,
 			false,
-			"https://metric-api.newrelic.com",
+			"https://metric-api.dualstack.nr-data.net",
 		},
 		{
 			"Staging URL, no region license, no collector URL",
@@ -442,7 +442,7 @@ func (s *ConfigSuite) TestCalculateDimensionalMetricURL(c *C) {
 			"",
 			true,
 			false,
-			"https://staging-metric-api.newrelic.com",
+			"https://staging-metric-api.dualstack.nr-data.net",
 		},
 		{
 			"Default URL, eu license region, no collector URL",
@@ -450,7 +450,7 @@ func (s *ConfigSuite) TestCalculateDimensionalMetricURL(c *C) {
 			"",
 			false,
 			false,
-			"https://metric-api.eu.newrelic.com",
+			"https://metric-api.dualstack.eu01.nr-data.net",
 		},
 		{
 			"Staging URL, eu license region, no collector URL",
@@ -458,7 +458,7 @@ func (s *ConfigSuite) TestCalculateDimensionalMetricURL(c *C) {
 			"",
 			true,
 			false,
-			"https://staging-metric-api.eu.newrelic.com",
+			"https://staging-metric-api.dualstack.eu01.nr-data.net",
 		},
 		{
 			"Default URL, jp license region, no collector URL",
@@ -490,7 +490,7 @@ func (s *ConfigSuite) TestCalculateDimensionalMetricURL(c *C) {
 			"",
 			true,
 			true,
-			"https://staging-metric-api.newrelic.com",
+			"https://staging-metric-api.dualstack.nr-data.net",
 		},
 	}
 

@@ -2079,6 +2079,10 @@ func calculateCollectorURL(licenseKey string, staging, fedramp bool) string {
 	prefix := urlRegionPrefix(licenseKey)
 	domain := nrDomainForRegion(prefix)
 
+	if domain == oldNRDomain {
+		return fmt.Sprintf(baseCollectorDualstackURL, urlEnvironmentPrefix(staging), prefix)
+	}
+
 	return fmt.Sprintf(baseCollectorURL, urlEnvironmentPrefix(staging), prefix, domain)
 }
 
@@ -2201,6 +2205,10 @@ func calculateDimensionalMetricURL(collectorURL string, licenseKey string, stagi
 	prefix := urlRegionPrefix(licenseKey)
 	domain := nrDomainForRegion(prefix)
 
+	if domain == oldNRDomain {
+		return fmt.Sprintf(baseDimensionalMetricDualstackURL, urlEnvironmentPrefix(staging), prefix)
+	}
+
 	return fmt.Sprintf(baseDimensionalMetricURL, urlEnvironmentPrefix(staging), prefix, domain)
 }
 
@@ -2215,7 +2223,7 @@ func urlRegionPrefix(licenseKey string) string {
 	// leaving this to not change anything for EU, will have to be optimised when we have clarity for
 	// all the regions.
 	if license.IsRegionEU(licenseKey) {
-		return "eu."
+		return "eu01."
 	}
 
 	r := license.GetRegionForURL(licenseKey)
